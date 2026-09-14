@@ -27,7 +27,7 @@ target_compile_options(launch-app PRIVATE -std=c++17 -Wall -Wextra -Wno-deprecat
 target_compile_definitions(launch-app PRIVATE APPLICATION_NAME=${APPLICATION_NAME} SHOULD_OPEN_IN_DEFAULT_BROWSER=${SHOULD_OPEN_IN_DEFAULT_BROWSER} SHOULD_RUN_IN_BACKGROUND=${SHOULD_RUN_IN_BACKGROUND})
 
 if (NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  if (${LINUX})
+  if (LINUX)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(APPINDICATOR REQUIRED appindicator3-0.1)
     
@@ -38,6 +38,9 @@ if (NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     $<$<BOOL:${WIN32}>:ws2_32>
     Boost::headers Boost::interprocess Boost::dll Boost::process Boost::algorithm
     $<$<BOOL:${LINUX}>:dl ${APPINDICATOR_LIBRARIES}>
+    # SOLARIS NOTE: Boost::dll uses dlopen; link libdl without
+    # pulling Linux AppIndicator dependencies into SunOS.
+    $<$<PLATFORM_ID:SunOS>:dl>
   )
 else()
   target_link_libraries(launch-app PRIVATE

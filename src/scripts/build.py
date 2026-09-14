@@ -155,6 +155,8 @@ def main():
         "src/mozconfig.mac-arm",
         "src/mozconfig.mac-intel",
         "src/mozconfig.flatpak",
+        # Solaris/SPARC64 Gecko configuration.
+        "src/mozconfig.solaris-sparc64",
 
         "src/scripts/build/launch-app-linux",
         "src/scripts/build/launch-app-linux-aarch64",
@@ -183,6 +185,9 @@ def main():
         "src/scripts/build/mac-arm",
         "src/scripts/build/mac-intel",
         "src/scripts/build/flatpak",
+        "src/scripts/build/solaris-sparc64",
+        "src/scripts/build/launch-app-solaris-sparc64",
+        "src/scripts/build/package-solaris-sparc64",
 
         "src/scripts/build/launch-app-linux",
         "src/scripts/build/launch-app-linux-aarch64",
@@ -239,8 +244,25 @@ def main():
     replace_placeholders(placeholder_files, placeholders)
 
     # Finally, lets start building.
-    if not build("download-firefox-source"):
-        print("Couldn't download the Firefox source code.")
+    #
+    # SOLARIS NOTE: Oracle's Solaris/SPARC Firefox patches are version-coupled
+    # to Oracle's Firefox recipe, so Solaris must not use Neutron's generic
+    # "latest Firefox release" source downloader.
+    solaris_platforms = [
+        p for p in appinfo["platforms"] if p.startswith("solaris")
+    ]
+    if solaris_platforms and len(solaris_platforms) != len(appinfo["platforms"]):
+        print("Solaris builds currently require a Solaris-only platform list.")
+        exit(1)
+
+    firefox_source_component = (
+        "download-firefox-source-solaris"
+        if solaris_platforms
+        else "download-firefox-source"
+    )
+
+    if not build(firefox_source_component):
+        print("Couldn't download/prepare the Firefox source code.")
         exit(1)
 
     if appinfo["openInDefaultBrowser"]:

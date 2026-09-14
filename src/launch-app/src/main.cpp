@@ -5,6 +5,11 @@
 #include <vector>
 #include <iostream>
 
+#if defined(__sun)
+// SOLARIS NOTE: sleep(3) is declared in <unistd.h> on Solaris.
+#include <unistd.h>
+#endif
+
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -182,6 +187,12 @@ int main(int argc, char *argv[]) {
     struct tray *tray_ptr = nullptr;
     std::string icon_path;
     WindowStateCtx window_state_ctx = {nullptr, window_state, should_exit, should_run_in_background, &config};
+#if defined(__sun)
+    // SOLARIS NOTE: Neutron currently has no native Solaris tray backend.
+    // Keep window/headless background behavior without Linux AppIndicator.
+    window_state = new bool(true);
+    should_run_in_background = new bool(config.run_in_background);
+#else
     if (SHOULD_RUN_IN_BACKGROUND){
         icon_path = platform_specific::get_icon_path(appDir);
 
@@ -217,6 +228,8 @@ int main(int argc, char *argv[]) {
         window_state = new bool(true);
         should_run_in_background = new bool(false);
     }
+
+#endif
 
     // Open in default browser stuff
     if (SHOULD_OPEN_IN_DEFAULT_BROWSER){

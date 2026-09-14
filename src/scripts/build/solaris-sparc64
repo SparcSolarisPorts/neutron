@@ -1,0 +1,77 @@
+#!/usr/bin/bash
+# Build Neutron's Firefox application on Oracle Solaris 11.4 / SPARC64.
+set -eu
+
+export LC_ALL=C
+export MOZBUILD_STATE_PATH="$PWD/.mozbuild"
+
+# SOLARIS NOTE: Oracle's Firefox recipe explicitly raises this on SPARC because
+# Gecko can exhaust the normal descriptor limit during "Reticulating splines".
+ulimit -n 16384 2>/dev/null || echo "warning: could not raise open-file limit" >&2
+
+# Oracle's Firefox build prefers GNU versions of several build utilities.
+if [ -d /usr/gnu/bin ]; then
+    PATH=/usr/gnu/bin:$PATH
+fi
+
+USERLAND_DIR=${SOLARIS_USERLAND_DIR:-"$PWD/.solaris-userland"}
+SOLARIS_FIREFOX_COMPONENT="$USERLAND_DIR/components/desktop/firefox"
+
+# Oracle includes a Node wrapper for its Firefox build. Prefer it when present.
+if [ -f "$SOLARIS_FIREFOX_COMPONENT/wrapper-node/node" ]; then
+    chmod 555 "$SOLARIS_FIREFOX_COMPONENT/wrapper-node/node" 2>/dev/null || true
+    PATH="$SOLARIS_FIREFOX_COMPONENT/wrapper-node:$PATH"
+fi
+
+# Match Oracle's current Firefox C++ allowances.
+export CXXFLAGS="${CXXFLAGS:-} -Wno-invalid-offsetof -fpermissive"
+export PATH
+
+cd mozilla-unified
+cp -r ../src/changed/* .
+cp ../src/mozconfig.solaris-sparc64 mozconfig
+
+# Do not use `mach bootstrap`: Solaris/SPARC is not a Mozilla Tier-1 bootstrap
+# target. Use the working Solaris compiler/Rust/cbindgen/development packages.
+./mach configure
+./mach build
+./mach package
+
+objdir=$(find "$PWD" -maxdepth 1 -type d -name 'obj-*' -print | head -n 1)
+if [ -z "$objdir" ] || [ ! -d "$objdir/dist" ]; then
+    echo "Could not locate Firefox objdir/dist." >&2
+    exit 1
+fi
+
+package=$(find "$objdir/dist" -maxdepth 1 -type f \
+    \( -name '*.tar.xz' -o -name '*.tar.bz2' -o -name '*.tar.gz' \) \
+    -print | head -n 1)
+
+if [ -z "$package" ]; then
+    echo "Could not locate the packaged Firefox archive." >&2
+    exit 1
+fi
+
+cd ..
+out=NEUTRON_INTERNAL_APP_NAME-solaris-sparc64
+rm -rf "$out"
+mkdir -p "$out"
+
+if command -v gtar >/dev/null 2>&1; then
+    gtar --strip-components=1 -xf "$package" -C "$out"
+elif [ -x /usr/gnu/bin/tar ]; then
+    /usr/gnu/bin/tar --strip-components=1 -xf "$package" -C "$out"
+else
+    echo "GNU tar (gtar) is required." >&2
+    exit 1
+fi
+
+cp -r src/distribution "$out/"
+cp "$out/distribution/policies-linux.json" "$out/distribution/policies.json"
+
+if [ -f src/open-in-default-browser/open-in-default-browser ]; then
+    cp src/open-in-default-browser/open-in-default-browser "$out/open-in-default-browser"
+    chmod 755 "$out/open-in-default-browser"
+fi
+
+echo "Built $out"

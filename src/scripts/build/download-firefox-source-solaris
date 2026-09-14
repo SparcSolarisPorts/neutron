@@ -1,0 +1,126 @@
+#!/usr/bin/bash
+# Prepare Firefox source for Neutron on Oracle Solaris 11.4 / SPARC64.
+#
+# SOLARIS NOTE:
+# Oracle Solaris Userland is the source of truth for the Firefox release that
+# has a matching Solaris/SPARC patch set:
+#   https://github.com/oracle/solaris-userland/tree/master/components/desktop/firefox
+#
+# This script reads COMPONENT_VERSION, ESR, and COMPONENT_ARCHIVE_HASH from
+# Oracle's current Makefile, downloads that Mozilla source archive, verifies it,
+# applies Oracle's patches, and only then applies Neutron's patches.
+set -eu
+
+export LC_ALL=C
+export MOZBUILD_STATE_PATH="$PWD/.mozbuild"
+
+USERLAND_URL=${SOLARIS_USERLAND_URL:-https://github.com/oracle/solaris-userland.git}
+USERLAND_DIR=${SOLARIS_USERLAND_DIR:-"$PWD/.solaris-userland"}
+COMPONENT_REL=components/desktop/firefox
+COMPONENT_DIR="$USERLAND_DIR/$COMPONENT_REL"
+
+if [ ! -d "$USERLAND_DIR/.git" ]; then
+    echo "Fetching Oracle Solaris Userland Firefox recipe..."
+    git clone --depth 1 --filter=blob:none --sparse "$USERLAND_URL" "$USERLAND_DIR"
+    git -C "$USERLAND_DIR" sparse-checkout set "$COMPONENT_REL"
+else
+    echo "Refreshing Oracle Solaris Userland Firefox recipe..."
+    git -C "$USERLAND_DIR" fetch --depth 1 origin master
+    git -C "$USERLAND_DIR" reset --hard origin/master
+    git -C "$USERLAND_DIR" sparse-checkout set "$COMPONENT_REL"
+fi
+
+MAKEFILE="$COMPONENT_DIR/Makefile"
+if [ ! -f "$MAKEFILE" ]; then
+    echo "Solaris Firefox Makefile not found: $MAKEFILE" >&2
+    exit 1
+fi
+
+FF_VERSION=$(awk '$1 == "COMPONENT_VERSION" && $2 == "=" { print $3; exit }' "$MAKEFILE")
+FF_ESR=$(awk '$1 == "ESR" && $2 == "=" { print $3; exit }' "$MAKEFILE")
+FF_SHA256=$(awk '
+    /^COMPONENT_ARCHIVE_HASH[[:space:]]*=/ { want=1; next }
+    want && /sha256:/ {
+        sub(/^[[:space:]]*sha256:/, "")
+        gsub(/[[:space:]]/, "")
+        print
+        exit
+    }
+' "$MAKEFILE")
+
+if [ -z "$FF_VERSION" ] || [ -z "$FF_ESR" ] || [ -z "$FF_SHA256" ]; then
+    echo "Could not parse Firefox version/ESR/hash from Oracle Solaris Userland." >&2
+    exit 1
+fi
+
+ARCHIVE="firefox-${FF_VERSION}${FF_ESR}.source.tar.xz"
+SOURCE_URL="https://ftp.mozilla.org/pub/firefox/releases/${FF_VERSION}${FF_ESR}/source/${ARCHIVE}"
+
+echo "Oracle-supported Solaris Firefox source: ${FF_VERSION}${FF_ESR}"
+echo "Mozilla source URL: $SOURCE_URL"
+echo "Oracle patch directory: $COMPONENT_DIR/patches"
+
+if [ -d mozilla-unified ]; then
+    echo "mozilla-unified already exists; keeping the prepared tree."
+    echo "Remove mozilla-unified to prepare Oracle's current Firefox source again."
+    exit 0
+fi
+
+if [ ! -f "$ARCHIVE" ]; then
+    /usr/bin/curl -fL --retry 3 -o "$ARCHIVE" "$SOURCE_URL"
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')
+elif command -v digest >/dev/null 2>&1; then
+    ACTUAL_SHA256=$(digest -a sha256 "$ARCHIVE" | awk '{print $1}')
+else
+    echo "Need sha256sum or Solaris digest(1) to verify Firefox source." >&2
+    exit 1
+fi
+
+if [ "$ACTUAL_SHA256" != "$FF_SHA256" ]; then
+    echo "Firefox source SHA-256 mismatch." >&2
+    echo "Expected: $FF_SHA256" >&2
+    echo "Actual:   $ACTUAL_SHA256" >&2
+    exit 1
+fi
+
+rm -rf "firefox-$FF_VERSION"
+if command -v gtar >/dev/null 2>&1; then
+    gtar -xJf "$ARCHIVE"
+elif [ -x /usr/gnu/bin/tar ]; then
+    /usr/gnu/bin/tar -xJf "$ARCHIVE"
+else
+    xz -dc "$ARCHIVE" | tar -xf -
+fi
+mv "firefox-$FF_VERSION" mozilla-unified
+
+if command -v gpatch >/dev/null 2>&1; then
+    PATCH_CMD=$(command -v gpatch)
+elif command -v patch >/dev/null 2>&1; then
+    PATCH_CMD=$(command -v patch)
+else
+    echo "Need patch or gpatch." >&2
+    exit 1
+fi
+
+apply_patch_dir() {
+    patch_dir=$1
+    label=$2
+    [ -d "$patch_dir" ] || return 0
+
+    echo "Applying $label patches..."
+    for p in "$patch_dir"/*.patch; do
+        [ -f "$p" ] || continue
+        echo "  $(basename "$p")"
+        "$PATCH_CMD" -d mozilla-unified -p1 < "$p"
+    done
+}
+
+# Order matters: first establish Oracle's Solaris/SPARC Firefox source, then
+# layer Neutron's browser/application changes on top.
+apply_patch_dir "$COMPONENT_DIR/patches" "Oracle Solaris/SPARC Firefox"
+apply_patch_dir "$PWD/src/patches" "Neutron"
+
+echo "Prepared Firefox ${FF_VERSION}${FF_ESR} for Solaris/SPARC."

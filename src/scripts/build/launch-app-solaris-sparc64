@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+# Build Neutron's small native launcher on Oracle Solaris/SPARC64.
+set -eu
+
+builddir=src/launch-app/build-solaris-sparc64
+rm -rf "$builddir"
+
+cmake -S src/launch-app -B "$builddir" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DAPPLICATION_NAME=\"NEUTRON_INTERNAL_APP_NAME\" \
+    -DSHOULD_OPEN_IN_DEFAULT_BROWSER=NEUTRON_SHOULD_OPEN_IN_DEFAULT_BROWSER \
+    -DSHOULD_RUN_IN_BACKGROUND=NEUTRON_SHOULD_RUN_IN_BACKGROUND
+
+jobs=$(getconf NPROCESSORS_ONLN 2>/dev/null || echo 1)
+cmake --build "$builddir" --parallel "$jobs"
+
+cp "$builddir/launch-app" NEUTRON_INTERNAL_APP_NAME-solaris-sparc64/launch-app
+chmod 755 NEUTRON_INTERNAL_APP_NAME-solaris-sparc64/launch-app

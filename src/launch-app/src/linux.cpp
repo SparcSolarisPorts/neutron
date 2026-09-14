@@ -1,4 +1,6 @@
-#if defined(__linux__)
+#if defined(__linux__) || defined(__sun)
+// SOLARIS NOTE: despite the historical filename, this implementation
+// is a generic POSIX filesystem/config backend and is reused on SunOS.
 #include <filesystem>
 #include <iostream>
 #include <string>

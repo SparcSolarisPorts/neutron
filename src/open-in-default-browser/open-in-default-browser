@@ -1,5 +1,16 @@
-#!/usr/bin/env bash
-#If you want to use a specific browser, change this to the executable of that. xdg-open opens in your default browser.
-browser="xdg-open"
+#!/usr/bin/bash
+# SOLARIS NOTE: Solaris can provide xdg-open via desktop/xdg/xdg-utils; GNOME
+# also commonly provides `gio open`, so use it as a fallback.
+set -eu
 
-$browser $(printf '%s' "$1" | sed "s/open\://g")
+url=$(printf '%s' "${1:-}" | sed 's/^open://')
+[ -n "$url" ] || exit 0
+
+if command -v xdg-open >/dev/null 2>&1; then
+    exec xdg-open "$url"
+elif command -v gio >/dev/null 2>&1; then
+    exec gio open "$url"
+else
+    echo "No default-browser opener found (xdg-open/gio)." >&2
+    exit 127
+fi

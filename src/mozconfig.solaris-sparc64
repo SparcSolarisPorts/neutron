@@ -1,0 +1,38 @@
+# Neutron Firefox mozconfig for Oracle Solaris 11.4 on 64-bit SPARC.
+#
+# SOLARIS NOTE:
+# Keep this aligned with Oracle Solaris Userland's maintained Firefox recipe:
+# https://github.com/oracle/solaris-userland/tree/master/components/desktop/firefox
+#
+# Oracle carries the Solaris/SPARC Gecko fixes. The Solaris source-preparation
+# script reads Oracle's current ESR/version/hash and applies Oracle's Firefox
+# patches BEFORE Neutron's own Gecko patches.
+#
+# Do not enable Mozilla official branding here; Neutron provides app branding.
+
+ac_add_options --with-app-name=NEUTRON_INTERNAL_APP_NAME
+ac_add_options --with-branding=browser/branding/NEUTRON_INTERNAL_APP_NAME
+ac_add_options --with-unsigned-addon-scopes=app,system
+export MOZ_REQUIRE_SIGNING=
+
+# Oracle Solaris Firefox baseline options relevant to a Neutron build.
+ac_add_options --disable-crashreporter
+ac_add_options --disable-debug-symbols
+ac_add_options --disable-tests
+ac_add_options --disable-updater
+ac_add_options --enable-jemalloc
+ac_add_options --enable-js-shell
+ac_add_options --enable-optimize
+ac_add_options --enable-pulseaudio
+ac_add_options --enable-replace-malloc
+ac_add_options --enable-system-ffi
+ac_add_options --enable-system-pixman
+ac_add_options --enable-update-channel=esr
+ac_add_options --with-intl-api
+ac_add_options --with-system-libevent
+ac_add_options --with-system-libvpx
+ac_add_options --with-system-zlib
+ac_add_options --without-wasm-sandboxed-libraries
+
+# Neutron does not use Mozilla's Windows default-browser helper.
+ac_add_options --disable-default-browser-agent

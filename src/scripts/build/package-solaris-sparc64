@@ -1,0 +1,19 @@
+#!/usr/bin/bash
+# Initial Solaris package format: a relocatable tar.bz2.
+# IPS packaging can be added after the first runtime validation.
+set -eu
+
+out=NEUTRON_INTERNAL_APP_NAME-solaris-sparc64
+archive=${out}.tar.bz2
+rm -f "$archive"
+
+if command -v gtar >/dev/null 2>&1; then
+    gtar -cjf "$archive" "$out"
+elif [ -x /usr/gnu/bin/tar ]; then
+    /usr/gnu/bin/tar -cjf "$archive" "$out"
+else
+    echo "GNU tar (gtar) is required." >&2
+    exit 1
+fi
+
+echo "Created $archive"
